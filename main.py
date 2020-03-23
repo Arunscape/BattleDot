@@ -34,11 +34,11 @@ class Board:
         if self.dot == (x,y):
             print("I WAS HIT")
 
-class Player(socketserver.StreamRequestHandler):
-    def handle(self):
-        print(f"Received request from {self.client_address}")
-        message = self.rfile.readline().strip()
-        print(f"Data received is {message}")
+#class Player(socketserver.StreamRequestHandler):
+#    def handle(self):
+#        print(f"Received request from {self.client_address}")
+#        message = self.rfile.readline().strip()
+#        print(f"Data received is {message}")
 
 
 if __name__ == "__main__":
@@ -62,10 +62,20 @@ if __name__ == "__main__":
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((destination, destination_port))
         s.sendto("HELLO".encode(), (destination, destination_port))
-        s.recv(1024)
+        message = s.recv(1024)
+        print(message.decode("utf-8"))
         s.close()
 
     port = input("Choose the port to run this application on: ")
     port = int(port)
-    server = socketserver.TCPServer(("127.0.0.1", port), Player)
-    server.serve_forever()
+    #server = socketserver.TCPServer(("127.0.0.1", port), Player)
+    #server.serve_forever()
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("0.0.0.0", port))
+    server.listen(5)
+
+    while True:
+        clientsocket, address = server.accept()
+        print(f"Connection from {address}")
+        clientsocket.send(bytes("HELLO", "utf-8"))
