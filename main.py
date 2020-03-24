@@ -156,28 +156,15 @@ if __name__ == "__main__":
         LEFT.append(setup_client("LEFT"))
         RIGHT.append(setup_client("RIGHT"))
     
-
-       # message = pickle.dumps({'setup_left': node_info})
-        #send_message(LEFT[-1], message)
-        
-        #message = pickle.dumps({'setup_right': node_info})
-        #send_message(RIGHT[-1], message)
         send_setup_left(RIGHT[-1], node_info)
         send_setup_right(LEFT[-1], node_info)
         
         # start the game!
-        #message = pickle.dumps({'announce_turn': RIGHT[-1].getpeername()})
-        #send_message(RIGHT[-1], message)
         CURRENT_TURN = RIGHT[-1].getpeername()
-        #print(f'sending announce_turn {CURRENT_TURN} to {RIGHT[-1].getpeername()}')
         send_message_pickle(RIGHT[-1], 'announce_turn', CURRENT_TURN)
 
-        # if the server sends data back
-        #if response := receive_message(client):
-        #    data = pickle.loads(response['data'])
-        #    print(f"Received: {data}")
-
     def new_client(client_socket, address):
+        global CURRENT_TURN
         while True:
             if m := receive_message(client_socket):
                 data = pickle.loads(m['data'])
@@ -187,7 +174,6 @@ if __name__ == "__main__":
                     print(f"Left is now {left}")
                     left = create_client(*left)
                     LEFT.append(left)
-                    #print(LEFT[-1])
                     send_message_pickle(client_socket, 'info', 'setup left complete')
                     
     
@@ -195,7 +181,6 @@ if __name__ == "__main__":
                     print(f"Right is now {right}")
                     right = create_client(*right)
                     RIGHT.append(right)
-                    #print(RIGHT[-1])
                     BOARD.reset_markers() # the person you're trying to kill has changed
                     send_message_pickle(client_socket, 'info', 'setup right complete')
     
@@ -205,7 +190,14 @@ if __name__ == "__main__":
                         CURRENT_TURN = n
                         send_message(RIGHT[-1], m['data'])
                     else:
-                        x, y = BOARD.user_input()
+                        x = int(input("Enter the x coordinate: "))
+                        if CURRENT_TURN != node_info: # might have changed
+                            print("A new user has joined. Ignoring input...")
+                            continue
+                        y = int(input("Enter the y coordinate: "))
+                        if CURRENT_TURN != node_info: # might have changed
+                            print("A new user has joined. Ignoring input...")
+                            continue
                         send_message_pickle(RIGHT[-1], 'make_move', (x, y))
 
                 elif m := data.get('make_move'):
