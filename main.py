@@ -109,9 +109,21 @@ def rotate_players(l):
 def get_host_ip()->str:
     return socket.gethostbyname(socket.gethostname())
 
-#def send_setup_left():
+def send_setup_left(client, node: Tuple[str, int]):
+    send_message_pickle(client, 'setup_left', node)
+    if response := receive_message(client):
+        data = pickle.loads(response['data'])
+        print(f"Received: {data}")
 
+def send_setup_right(client, node: Tuple[str, int]):
+    send_message_pickle(client, 'setup_right', node)
+    if response := receive_message(client):
+        data = pickle.loads(response['data'])
+        print(f"Received: {data}")
 
+def send_message_pickle(client, key: str, val:any):
+    message = pickle.dumps({key: val})
+    send_message(client, message)
 
 if __name__ == "__main__":
 
@@ -144,11 +156,13 @@ if __name__ == "__main__":
         RIGHT.append(setup_client("RIGHT"))
     
 
-        message = pickle.dumps({'setup_left': node_info})
-        send_message(LEFT[-1], message)
+       # message = pickle.dumps({'setup_left': node_info})
+        #send_message(LEFT[-1], message)
         
-        message = pickle.dumps({'setup_right': node_info})
-        send_message(RIGHT[-1], message)
+        #message = pickle.dumps({'setup_right': node_info})
+        #send_message(RIGHT[-1], message)
+        send_setup_left(RIGHT[-1], node_info)
+        send_setup_right(LEFT[-1], node_info)
         
         if second:
             # start the game!
@@ -174,11 +188,14 @@ if __name__ == "__main__":
                 print(f"Left is now {left}")
                 left = create_client(*left)
                 LEFT.append(left)
+                send_message(client_socket, "done".encode("utf-8"))
+
             elif right := data.get('setup_right'):
                 print(f"Right is now {right}")
                 right = create_client(*right)
                 RIGHT.append(right)
                 BOARD.reset_markers() # the person you're trying to kill has changed
+                send_message(client_socket, "done".encode("utf-8"))
             elif  n := data.get('announce_turn'):
                 print(f"turn announce: {n}")
                 if n != node_info:
