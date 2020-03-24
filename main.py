@@ -129,9 +129,10 @@ if __name__ == "__main__":
         client= setup_client()
     
         player = (get_host_ip(), port)
-        player = pickle.dumps(player)
 
-        send_message(client, player)
+        message = pickle.dumps({'setup': player})
+
+        send_message(client, message)
 #        print(receive_message(client))
         if player_list := receive_message(client):
             PLAYERS = pickle.loads(player_list['data'])
@@ -141,9 +142,25 @@ if __name__ == "__main__":
     while True:
         client_socket, address = server.accept()
         print(f"Connection from {address}")
-        if p := receive_message(client_socket):
-            player = pickle.loads(p['data'])
-            print(f"New player {player} wants to join")
-            PLAYERS.append(player)
-            message = pickle.dumps(rotate_players(PLAYERS))
-            send_message(client_socket, message)
+        if m := receive_message(client_socket):
+            data = pickle.loads(m['data'])
+
+            if 'setup' in data:
+                player = data['setup']
+                print(f"New player {player} wants to join")
+                client = None
+                PLAYERS.append(player)
+                message = pickle.dumps(rotate_players(PLAYERS))
+                send_message(client_socket, message)
+                client_ip, client_port = PLAYERS[1] # next in list
+                client = create_client(client_ip, client_port)
+
+            else if 'domove' in data:
+                x, y = data['domove']
+                BOARD.receive_bomb(x, y)
+                
+                x = int(input("x coordinate to attack!"))
+                y = int(input("y coordinate to attack!"))
+                
+                message = pickle.dumps({'domove': (x, y)})
+                send_message(client, message)
