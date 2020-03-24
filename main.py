@@ -74,7 +74,7 @@ def setup_server(port=None):
 def create_server(port: int):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(("0.0.0.0", port))
+    s.bind(("127.0.0.1", port))
     s.listen()
     return s
 
@@ -88,6 +88,7 @@ def receive_message(client_socket):
         print(f"header: {message_header}")
 
         if not len(message_header):
+            print("Received empty header")
             return False
         message_length = int(message_header.decode("utf-8").strip())
         return {"header": message_header, "data": client_socket.recv(message_length)}
@@ -96,9 +97,9 @@ def receive_message(client_socket):
         return False
 
 
-def send_message(server_socket, message: bytes):
+def send_message(socket, message: bytes, server=False):
     header = f"{len(message):<{HEADER_LENGTH}}".encode("utf-8")
-    server_socket.send(header + message)
+    socket.send(header + message)
 
 def rotate_list(l, pos: int):
     return l[pos:] + l[:pos]
@@ -113,13 +114,13 @@ def send_setup_left(client, node: Tuple[str, int]):
     send_message_pickle(client, 'setup_left', node)
     if response := receive_message(client):
         data = pickle.loads(response['data'])
-        print(f"Received: {data}")
+        print(f"Setup left complete: {data}")
 
 def send_setup_right(client, node: Tuple[str, int]):
     send_message_pickle(client, 'setup_right', node)
     if response := receive_message(client):
         data = pickle.loads(response['data'])
-        print(f"Received: {data}")
+        print(f"Setup right complete: {data}")
 
 def send_message_pickle(client, key: str, val:any):
     message = pickle.dumps({key: val})
@@ -146,7 +147,8 @@ if __name__ == "__main__":
     second = second == "y"
 
     server, port = setup_server()
-    node_info = (get_host_ip(), port)
+    node_info = server.getsockname()
+    print(f"nodeinfo: {node_info}")
 
     if first:
         CURRENT_TURN = node_info
@@ -166,8 +168,11 @@ if __name__ == "__main__":
         
         if second:
             # start the game!
-            message = pickle.dumps({'announce_turn': RIGHT[-1].getpeername()})
-            send_message(RIGHT[-1], message)
+            #message = pickle.dumps({'announce_turn': RIGHT[-1].getpeername()})
+            #send_message(RIGHT[-1], message)
+            CURRENT_TURN = RIGHT[-1].getpeername()
+            print(f'sending announce_turn {CURRENT_TURN} to {RIGHT[-1]}')
+            send_message_pickle(RIGHT[-1], 'announce_turn', CURRENT_TURN)
 
         # if the server sends data back
         #if response := receive_message(client):
@@ -178,27 +183,31 @@ if __name__ == "__main__":
     while True:
         client_socket, address = server.accept()
         print(f"Connection from {address}")
-        m = receive_message(client_socket)
-        print(pickle.loads(m['data']))
-        if m:
-        #if m := receive_message(client_socket):
+
+        if m := receive_message(client_socket):
             data = pickle.loads(m['data'])
+            print(f"Received data: {data}")
 
             if left := data.get('setup_left'):
                 print(f"Left is now {left}")
                 left = create_client(*left)
                 LEFT.append(left)
-                send_message(client_socket, "done".encode("utf-8"))
+                print(LEFT[-1])
+                send_message_pickle(client_socket, 'info', 'setup left complete')
+                
 
             elif right := data.get('setup_right'):
                 print(f"Right is now {right}")
                 right = create_client(*right)
                 RIGHT.append(right)
+                print(RIGHT[-1])
                 BOARD.reset_markers() # the person you're trying to kill has changed
-                send_message(client_socket, "done".encode("utf-8"))
+                send_message_pickle(client_socket, 'info', 'setup right complete')
+
             elif  n := data.get('announce_turn'):
                 print(f"turn announce: {n}")
                 if n != node_info:
+                    CURRENT_TURN = n
                     send_message(RIGHT[-1], m[data])
                 else:
                     x, y = BOARD.user_input()
@@ -214,6 +223,8 @@ if __name__ == "__main__":
                 else:
                     message = pickle.dumps({'announce_turn': node_info})
                     send_message(RIGHT[-1], message)
-                    
             else:
-                print("🤷")
+                print("Did not handle this yet")
+                    
+        else:
+            print("idk")
