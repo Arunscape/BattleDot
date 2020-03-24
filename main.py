@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import List
+from typing import List, Tuple
 import random
 import socket
 import pickle
@@ -42,7 +42,7 @@ class Board:
     def reset_markers(self) -> None:
         self.board = [["■" for _ in range(10)] for _ in range(10)]
 
-    def user_input(self) -> Tuple(int, int):
+    def user_input(self) -> Tuple[int, int]:
         print("It's your turn!")
         self.print()
         x = int(input("Enter the x coordinate: "))
@@ -85,12 +85,14 @@ def receive_message(client_socket):
     """
     try:
         message_header = client_socket.recv(HEADER_LENGTH)
+        print(f"header: {message_header}")
 
         if not len(message_header):
             return False
         message_length = int(message_header.decode("utf-8").strip())
         return {"header": message_header, "data": client_socket.recv(message_length)}
-    except Exception:
+    except Exception as e:
+        print(f"Uhh {e}")
         return False
 
 
@@ -107,6 +109,9 @@ def rotate_players(l):
 def get_host_ip()->str:
     return socket.gethostbyname(socket.gethostname())
 
+#def send_setup_left():
+
+
 
 if __name__ == "__main__":
 
@@ -122,8 +127,10 @@ if __name__ == "__main__":
 
     first = input("Are you the first player? (y/n): ")
     first = first == "y"
-
-    second = input("Are you the second player? (y/n): ")
+    
+    second = None
+    if not first:
+        second = input("Are you the second player? (y/n): ")
     second = second == "y"
 
     server, port = setup_server()
@@ -145,7 +152,7 @@ if __name__ == "__main__":
         
         if second:
             # start the game!
-            message = pickle.dumps({'announce_turn': RIGHT[-1]})
+            message = pickle.dumps({'announce_turn': RIGHT[-1].getpeername()})
             send_message(RIGHT[-1], message)
 
         # if the server sends data back
@@ -157,7 +164,10 @@ if __name__ == "__main__":
     while True:
         client_socket, address = server.accept()
         print(f"Connection from {address}")
-        if m := receive_message(client_socket):
+        m = receive_message(client_socket)
+        print(pickle.loads(m['data']))
+        if m:
+        #if m := receive_message(client_socket):
             data = pickle.loads(m['data'])
 
             if left := data.get('setup_left'):
@@ -170,19 +180,23 @@ if __name__ == "__main__":
                 RIGHT.append(right)
                 BOARD.reset_markers() # the person you're trying to kill has changed
             elif  n := data.get('announce_turn'):
+                print(f"turn announce: {n}")
                 if n != node_info:
                     send_message(RIGHT[-1], m[data])
                 else:
                     x, y = BOARD.user_input()
                     message = pickle.dumps({'make_move': (x,y)})
             elif m := data.get('make_move'):
+                print(f"incoming move: {m}")
                 if BOARD.receive_bomb(*m):
-                    message = pickle.dumps({'setup_left': LEFT[-1]})
+                    message = pickle.dumps({'setup_left': LEFT[-1].getpeername()})
                     send_message(RIGHT[-1], message)
         
-                    message = pickle.dumps({'setup_right': RIGHT[-1]})
+                    message = pickle.dumps({'setup_right': RIGHT[-1].getpeername()})
                     send_message(LEFT[-1], message)
                 else:
                     message = pickle.dumps({'announce_turn': node_info})
                     send_message(RIGHT[-1], message)
                     
+            else:
+                print("🤷")
