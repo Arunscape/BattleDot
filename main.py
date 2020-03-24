@@ -54,7 +54,7 @@ class Board:
 def create_client(destination: str, destination_port: int):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((destination, destination_port))
-    print(f'created client on {s.getsockname()} to {s.getpeername()}')
+    #print(f'created client on {s.getsockname()} to {s.getpeername()}')
     return s
 
 def setup_client(direction: str):
@@ -86,7 +86,7 @@ def receive_message(client_socket):
     For the server to receive a message
     """
     try:
-        print(f"expecting message from {client_socket.getpeername()}")
+        #print(f"expecting message from {client_socket.getpeername()}")
         message_header = client_socket.recv(HEADER_LENGTH)
 
         if not len(message_header):
@@ -102,7 +102,7 @@ def receive_message(client_socket):
 def send_message(socket, message: bytes, server=False):
     header = f"{len(message):<{HEADER_LENGTH}}".encode("utf-8")
     socket.send(header + message)
-    print(f"sending to {socket.getpeername()} {pickle.loads(message)} from {socket.getsockname()}")
+    #print(f"sending to {socket.getpeername()} {pickle.loads(message)} from {socket.getsockname()}")
 
 def rotate_list(l, pos: int):
     return l[pos:] + l[:pos]
@@ -123,7 +123,7 @@ def send_setup_right(client, node: Tuple[str, int]):
     send_message_pickle(client, 'setup_right', node)
     if response := receive_message(client):
         data = pickle.loads(response['data'])
-        print(f"Setup right complete: {data}")
+        #print(f"Setup right complete: {data}")
 
 def send_message_pickle(client, key: str, val:any):
     message = pickle.dumps({key: val})
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     
     server, port = setup_server()
     node_info = server.getsockname()
-    print(f"nodeinfo: {node_info}")
+    #print(f"nodeinfo: {node_info}")
 
     if first:
         CURRENT_TURN = node_info
@@ -159,49 +159,44 @@ if __name__ == "__main__":
         send_setup_left(RIGHT[-1], node_info)
         send_setup_right(LEFT[-1], node_info)
         
-        # start the game!
-        CURRENT_TURN = RIGHT[-1].getpeername()
-        send_message_pickle(RIGHT[-1], 'announce_turn', CURRENT_TURN)
+        if LEFT[-1].getpeername() == RIGHT[-1].getpeername():
+            # 2nd player
+            # start the game!
+            CURRENT_TURN = RIGHT[-1].getpeername()
+            send_message_pickle(RIGHT[-1], 'announce_turn', CURRENT_TURN)
 
     def new_client(client_socket, address):
         global CURRENT_TURN
         while True:
             if m := receive_message(client_socket):
                 data = pickle.loads(m['data'])
-                print(f"Received data: {data}")
+                #print(f"Received data: {data}")
     
                 if left := data.get('setup_left'):
-                    print(f"Left is now {left}")
+                    #print(f"Left is now {left}")
                     left = create_client(*left)
                     LEFT.append(left)
                     send_message_pickle(client_socket, 'info', 'setup left complete')
                     
     
                 elif right := data.get('setup_right'):
-                    print(f"Right is now {right}")
+                    #print(f"Right is now {right}")
                     right = create_client(*right)
                     RIGHT.append(right)
                     BOARD.reset_markers() # the person you're trying to kill has changed
                     send_message_pickle(client_socket, 'info', 'setup right complete')
     
                 elif  n := data.get('announce_turn'):
-                    print(f"turn announce: {n}")
+                    #print(f"turn announce: {n}")
                     if n != node_info:
                         CURRENT_TURN = n
                         send_message(RIGHT[-1], m['data'])
                     else:
-                        x = int(input("Enter the x coordinate: "))
-                        if CURRENT_TURN != node_info: # might have changed
-                            print("A new user has joined. Ignoring input...")
-                            continue
-                        y = int(input("Enter the y coordinate: "))
-                        if CURRENT_TURN != node_info: # might have changed
-                            print("A new user has joined. Ignoring input...")
-                            continue
+                        x,y = BOARD.user_input()
                         send_message_pickle(RIGHT[-1], 'make_move', (x, y))
 
                 elif m := data.get('make_move'):
-                    print(f"incoming move: {m}")
+                    #print(f"incoming move: {m}")
                     if BOARD.receive_bomb(*m):
                         message = pickle.dumps({'setup_left': LEFT[-1].getpeername()})
                         send_message(RIGHT[-1], message)
@@ -215,13 +210,15 @@ if __name__ == "__main__":
                     print("Did not handle this yet")
                         
             else:
+                # connection lost
+                RIGHT.pop()
                 print("idk")
 
 
     threads = []
     while True:
         client_socket, address = server.accept()
-        print(f"Connection from {address}")
+        #print(f"Connection from {address}")
         x = threading.Thread(target=new_client, args=(client_socket, address))
         threads.append(x)
         x.start()
