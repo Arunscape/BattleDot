@@ -18,6 +18,7 @@ class Board:
         self.dot = (random.randint(0, 9), random.randint(0, 9))
 
     def print(self) -> None:
+        print()
         for row in self.board:
             print(" ".join(row))
 
@@ -31,32 +32,34 @@ class Board:
 
     def send_bomb(self, x: int, y: int):
         self.update_board(x, y, "X")
-        # TODO IPC
-        pass
 
-    def receive_bomb(self, x: int, y: int):
+    def receive_bomb(self, x: int, y: int) -> bool:
         if self.dot == (x, y):
             print("I WAS HIT")
+            return True
+        return False
 
+    def reset_markers(self) -> None:
+        self.board = [["■" for _ in range(10)] for _ in range(10)]
 
-# class Player(socketserver.StreamRequestHandler):
-#    def handle(self):
-#        print(f"Received request from {self.client_address}")
-#        message = self.rfile.readline().strip()
-#        print(f"Data received is {message}")
-
+    def user_input(self) -> Tuple(int, int):
+        print("It's your turn!")
+        self.print()
+        x = int(input("Enter the x coordinate: "))
+        y = int(input("Enter the y coordinate: "))
+        self.send_bomb(x, y)
+        return x, y
 
 def create_client(destination: str, destination_port: int):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((destination, destination_port))
     return s
 
-
-def setup_client():
+def setup_client(direction: str):
     destination = input(
-        "Choose the destination address. If you were sitting at a table, this person would be on your right: "
+            f"Choose the destination address. This person is on your {direction}: "
     )
-    destination_port = input("Choose the port for the destination: ")
+    destination_port = input("Port: ")
     destination_port = int(destination_port)
     return create_client(destination, destination_port)
 
@@ -107,9 +110,11 @@ def get_host_ip()->str:
 
 if __name__ == "__main__":
 
-    PLAYERS = [] # index 0 is the process's own player info 
+    LEFT = []
+    RIGHT = []
+
     BOARD = Board()
-    GAME_STARTED = False
+    CURRENT_TURN = None
 
     print(
         "Welcome to BattleDot, an unpopular networked spinoff of the popular Battleship game."
@@ -118,25 +123,35 @@ if __name__ == "__main__":
     first = input("Are you the first player? (y/n): ")
     first = first == "y"
 
+    second = input("Are you the second player? (y/n): ")
+    second = second == "y"
+
     server, port = setup_server()
+    node_info = (get_host_ip(), port)
 
     if first:
-        PLAYERS.append((get_host_ip(), port))
+        CURRENT_TURN = node_info
 
-    client = None
-    
     if not first:
-        client= setup_client()
+        LEFT.append(setup_client("LEFT"))
+        RIGHT.append(setup_client("RIGHT"))
     
-        player = (get_host_ip(), port)
 
-        message = pickle.dumps({'setup': player})
+        message = pickle.dumps({'setup_left': node_info})
+        send_message(LEFT[-1], message)
+        
+        message = pickle.dumps({'setup_right': node_info})
+        send_message(RIGHT[-1], message)
+        
+        if second:
+            # start the game!
+            message = pickle.dumps({'announce_turn': RIGHT[-1]})
+            send_message(RIGHT[-1], message)
 
-        send_message(client, message)
-#        print(receive_message(client))
-        if player_list := receive_message(client):
-            PLAYERS = pickle.loads(player_list['data'])
-            print(f"Received player list {PLAYERS}")
+        # if the server sends data back
+        #if response := receive_message(client):
+        #    data = pickle.loads(response['data'])
+        #    print(f"Received: {data}")
 
 
     while True:
@@ -145,22 +160,29 @@ if __name__ == "__main__":
         if m := receive_message(client_socket):
             data = pickle.loads(m['data'])
 
-            if 'setup' in data:
-                player = data['setup']
-                print(f"New player {player} wants to join")
-                client = None
-                PLAYERS.append(player)
-                message = pickle.dumps(rotate_players(PLAYERS))
-                send_message(client_socket, message)
-                client_ip, client_port = PLAYERS[1] # next in list
-                client = create_client(client_ip, client_port)
-
-            else if 'domove' in data:
-                x, y = data['domove']
-                BOARD.receive_bomb(x, y)
-                
-                x = int(input("x coordinate to attack!"))
-                y = int(input("y coordinate to attack!"))
-                
-                message = pickle.dumps({'domove': (x, y)})
-                send_message(client, message)
+            if left := data.get('setup_left'):
+                print(f"Left is now {left}")
+                left = create_client(*left)
+                LEFT.append(left)
+            elif right := data.get('setup_right'):
+                print(f"Right is now {right}")
+                right = create_client(*right)
+                RIGHT.append(right)
+                BOARD.reset_markers() # the person you're trying to kill has changed
+            elif  n := data.get('announce_turn'):
+                if n != node_info:
+                    send_message(RIGHT[-1], m[data])
+                else:
+                    x, y = BOARD.user_input()
+                    message = pickle.dumps({'make_move': (x,y)})
+            elif m := data.get('make_move'):
+                if BOARD.receive_bomb(*m):
+                    message = pickle.dumps({'setup_left': LEFT[-1]})
+                    send_message(RIGHT[-1], message)
+        
+                    message = pickle.dumps({'setup_right': RIGHT[-1]})
+                    send_message(LEFT[-1], message)
+                else:
+                    message = pickle.dumps({'announce_turn': node_info})
+                    send_message(RIGHT[-1], message)
+                    
