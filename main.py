@@ -53,6 +53,7 @@ class Board:
 def create_client(destination: str, destination_port: int):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((destination, destination_port))
+    print(f'created client on {s.getsockname()} to {s.getpeername()}')
     return s
 
 def setup_client(direction: str):
@@ -84,8 +85,8 @@ def receive_message(client_socket):
     For the server to receive a message
     """
     try:
+        print(f"expecting message from {client_socket.getpeername()}")
         message_header = client_socket.recv(HEADER_LENGTH)
-        print(f"header: {message_header}")
 
         if not len(message_header):
             print("Received empty header")
@@ -100,6 +101,7 @@ def receive_message(client_socket):
 def send_message(socket, message: bytes, server=False):
     header = f"{len(message):<{HEADER_LENGTH}}".encode("utf-8")
     socket.send(header + message)
+    print(f"sending to {socket.getpeername()} {pickle.loads(message)} from {socket.getsockname()}")
 
 def rotate_list(l, pos: int):
     return l[pos:] + l[:pos]
@@ -171,7 +173,7 @@ if __name__ == "__main__":
             #message = pickle.dumps({'announce_turn': RIGHT[-1].getpeername()})
             #send_message(RIGHT[-1], message)
             CURRENT_TURN = RIGHT[-1].getpeername()
-            print(f'sending announce_turn {CURRENT_TURN} to {RIGHT[-1]}')
+            #print(f'sending announce_turn {CURRENT_TURN} to {RIGHT[-1].getpeername()}')
             send_message_pickle(RIGHT[-1], 'announce_turn', CURRENT_TURN)
 
         # if the server sends data back
@@ -192,7 +194,7 @@ if __name__ == "__main__":
                 print(f"Left is now {left}")
                 left = create_client(*left)
                 LEFT.append(left)
-                print(LEFT[-1])
+                #print(LEFT[-1])
                 send_message_pickle(client_socket, 'info', 'setup left complete')
                 
 
@@ -200,7 +202,7 @@ if __name__ == "__main__":
                 print(f"Right is now {right}")
                 right = create_client(*right)
                 RIGHT.append(right)
-                print(RIGHT[-1])
+                #print(RIGHT[-1])
                 BOARD.reset_markers() # the person you're trying to kill has changed
                 send_message_pickle(client_socket, 'info', 'setup right complete')
 
