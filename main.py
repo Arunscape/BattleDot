@@ -95,10 +95,16 @@ def send_message(server_socket, message: bytes):
     header = f"{len(message):<{HEADER_LENGTH}}".encode("utf-8")
     server_socket.send(header + message)
 
+def rotate_list(l, pos: int):
+    return l[pos:] + l[:pos]
+
+def rotate_players(l):
+    return rotate_list(l, len(l)-1)
+
 
 if __name__ == "__main__":
 
-    PLAYERS = ["A", "B", "C"]
+    PLAYERS = [] # index 0 is the process's own uid
     BOARD = Board()
     GAME_STARTED = False
 
@@ -110,7 +116,10 @@ if __name__ == "__main__":
     first = first == "y"
 
     client = None
-    if not first:
+    
+    if first:
+        PLAYERS.append(str(uuid.uuid1()))
+    else:
         client = setup_client()
         # send UUID to server which signifies a new user wants to join
         uid = str(uuid.uuid1()).encode("utf-8")
@@ -118,13 +127,17 @@ if __name__ == "__main__":
         #client.send(uid_header + uid)
         send_message(client, uid)
 #        print(receive_message(client))
-        print(pickle.loads(receive_message(client)['data']))
+        if player_list := receive_message(client):
+            PLAYERS = pickle.loads(player_list['data'])
+            print(f"Received player list {PLAYERS}")
 
     server = setup_server()
 
     while True:
         client_socket, address = server.accept()
         print(f"Connection from {address}")
-        message = pickle.dumps(PLAYERS)
-        send_message(client_socket, message)
-        print(receive_message(client_socket))
+        if uid := receive_message(client_socket):
+            print(f"New player {uid['data']} wants to join")
+            PLAYERS.append(uid['data'].decode('utf-8'))
+            message = pickle.dumps(rotate_players(PLAYERS))
+            send_message(client_socket, message)
