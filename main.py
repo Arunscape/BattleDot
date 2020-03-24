@@ -3,7 +3,6 @@ from typing import List
 import random
 import socket
 import pickle
-import uuid
 
 HEADER_LENGTH = 10
 
@@ -108,7 +107,7 @@ def get_host_ip()->str:
 
 if __name__ == "__main__":
 
-    PLAYERS = [] # index 0 is the process's own uid
+    PLAYERS = [] # index 0 is the process's own player info 
     BOARD = Board()
     GAME_STARTED = False
 
@@ -128,10 +127,6 @@ if __name__ == "__main__":
     
     if not first:
         client= setup_client()
-        # send UUID to server which signifies a new user wants to join
-        uid = str(uuid.uuid1()).encode("utf-8")
-        #uid_header = f"{len(uid):<{HEADER_LENGTH}}".encode("utf-8")
-        #client.send(uid_header + uid)
     
         player = (get_host_ip(), port)
         player = pickle.dumps(player)
@@ -146,8 +141,8 @@ if __name__ == "__main__":
     while True:
         client_socket, address = server.accept()
         print(f"Connection from {address}")
-        if uid := receive_message(client_socket):
-            player = pickle.loads(uid['data'])
+        if p := receive_message(client_socket):
+            player = pickle.loads(p['data'])
             print(f"New player {player} wants to join")
             PLAYERS.append(player)
             message = pickle.dumps(rotate_players(PLAYERS))
