@@ -62,10 +62,11 @@ def setup_client():
     return create_client(destination, destination_port)
 
 
-def setup_server():
-    port = input("Choose the port to run this application on: ")
-    port = int(port)
-    return create_server(port)
+def setup_server(port=None):
+    if port is None:
+        port = input("Choose the port to run this application on: ")
+        port = int(port)
+    return create_server(port), port
 
 
 def create_server(port: int):
@@ -101,6 +102,9 @@ def rotate_list(l, pos: int):
 def rotate_players(l):
     return rotate_list(l, len(l)-1)
 
+def get_host_ip()->str:
+    return socket.gethostbyname(socket.gethostname())
+
 
 if __name__ == "__main__":
 
@@ -115,29 +119,36 @@ if __name__ == "__main__":
     first = input("Are you the first player? (y/n): ")
     first = first == "y"
 
+    server, port = setup_server()
+
+    if first:
+        PLAYERS.append((get_host_ip(), port))
+
     client = None
     
-    if first:
-        PLAYERS.append(str(uuid.uuid1()))
-    else:
-        client = setup_client()
+    if not first:
+        client= setup_client()
         # send UUID to server which signifies a new user wants to join
         uid = str(uuid.uuid1()).encode("utf-8")
         #uid_header = f"{len(uid):<{HEADER_LENGTH}}".encode("utf-8")
         #client.send(uid_header + uid)
-        send_message(client, uid)
+    
+        player = (get_host_ip(), port)
+        player = pickle.dumps(player)
+
+        send_message(client, player)
 #        print(receive_message(client))
         if player_list := receive_message(client):
             PLAYERS = pickle.loads(player_list['data'])
             print(f"Received player list {PLAYERS}")
 
-    server = setup_server()
 
     while True:
         client_socket, address = server.accept()
         print(f"Connection from {address}")
         if uid := receive_message(client_socket):
-            print(f"New player {uid['data']} wants to join")
-            PLAYERS.append(uid['data'].decode('utf-8'))
+            player = pickle.loads(uid['data'])
+            print(f"New player {player} wants to join")
+            PLAYERS.append(player)
             message = pickle.dumps(rotate_players(PLAYERS))
             send_message(client_socket, message)
