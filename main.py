@@ -3,6 +3,7 @@ from typing import List, Tuple
 import random
 import socket
 import pickle
+import threading
 
 HEADER_LENGTH = 10
 
@@ -134,6 +135,7 @@ if __name__ == "__main__":
     RIGHT = []
 
     BOARD = Board()
+    print(f"your dot is {BOARD.dot}")
     CURRENT_TURN = None
 
     print(
@@ -143,11 +145,6 @@ if __name__ == "__main__":
     first = input("Are you the first player? (y/n): ")
     first = first == "y"
     
-    second = None
-    if not first:
-        second = input("Are you the second player? (y/n): ")
-    second = second == "y"
-
     server, port = setup_server()
     node_info = server.getsockname()
     print(f"nodeinfo: {node_info}")
@@ -168,65 +165,72 @@ if __name__ == "__main__":
         send_setup_left(RIGHT[-1], node_info)
         send_setup_right(LEFT[-1], node_info)
         
-        if second:
-            # start the game!
-            #message = pickle.dumps({'announce_turn': RIGHT[-1].getpeername()})
-            #send_message(RIGHT[-1], message)
-            CURRENT_TURN = RIGHT[-1].getpeername()
-            #print(f'sending announce_turn {CURRENT_TURN} to {RIGHT[-1].getpeername()}')
-            send_message_pickle(RIGHT[-1], 'announce_turn', CURRENT_TURN)
+        # start the game!
+        #message = pickle.dumps({'announce_turn': RIGHT[-1].getpeername()})
+        #send_message(RIGHT[-1], message)
+        CURRENT_TURN = RIGHT[-1].getpeername()
+        #print(f'sending announce_turn {CURRENT_TURN} to {RIGHT[-1].getpeername()}')
+        send_message_pickle(RIGHT[-1], 'announce_turn', CURRENT_TURN)
 
         # if the server sends data back
         #if response := receive_message(client):
         #    data = pickle.loads(response['data'])
         #    print(f"Received: {data}")
 
+    def new_client(client_socket, address):
+        while True:
+            if m := receive_message(client_socket):
+                data = pickle.loads(m['data'])
+                print(f"Received data: {data}")
+    
+                if left := data.get('setup_left'):
+                    print(f"Left is now {left}")
+                    left = create_client(*left)
+                    LEFT.append(left)
+                    #print(LEFT[-1])
+                    send_message_pickle(client_socket, 'info', 'setup left complete')
+                    
+    
+                elif right := data.get('setup_right'):
+                    print(f"Right is now {right}")
+                    right = create_client(*right)
+                    RIGHT.append(right)
+                    #print(RIGHT[-1])
+                    BOARD.reset_markers() # the person you're trying to kill has changed
+                    send_message_pickle(client_socket, 'info', 'setup right complete')
+    
+                elif  n := data.get('announce_turn'):
+                    print(f"turn announce: {n}")
+                    if n != node_info:
+                        CURRENT_TURN = n
+                        send_message(RIGHT[-1], m['data'])
+                    else:
+                        x, y = BOARD.user_input()
+                        send_message_pickle(RIGHT[-1], 'make_move', (x, y))
 
+                elif m := data.get('make_move'):
+                    print(f"incoming move: {m}")
+                    if BOARD.receive_bomb(*m):
+                        message = pickle.dumps({'setup_left': LEFT[-1].getpeername()})
+                        send_message(RIGHT[-1], message)
+            
+                        message = pickle.dumps({'setup_right': RIGHT[-1].getpeername()})
+                        send_message(LEFT[-1], message)
+                    else:
+                        message = pickle.dumps({'announce_turn': node_info})
+                        send_message(RIGHT[-1], message)
+                else:
+                    print("Did not handle this yet")
+                        
+            else:
+                print("idk")
+
+
+    threads = []
     while True:
         client_socket, address = server.accept()
         print(f"Connection from {address}")
+        x = threading.Thread(target=new_client, args=(client_socket, address))
+        threads.append(x)
+        x.start()
 
-        if m := receive_message(client_socket):
-            data = pickle.loads(m['data'])
-            print(f"Received data: {data}")
-
-            if left := data.get('setup_left'):
-                print(f"Left is now {left}")
-                left = create_client(*left)
-                LEFT.append(left)
-                #print(LEFT[-1])
-                send_message_pickle(client_socket, 'info', 'setup left complete')
-                
-
-            elif right := data.get('setup_right'):
-                print(f"Right is now {right}")
-                right = create_client(*right)
-                RIGHT.append(right)
-                #print(RIGHT[-1])
-                BOARD.reset_markers() # the person you're trying to kill has changed
-                send_message_pickle(client_socket, 'info', 'setup right complete')
-
-            elif  n := data.get('announce_turn'):
-                print(f"turn announce: {n}")
-                if n != node_info:
-                    CURRENT_TURN = n
-                    send_message(RIGHT[-1], m[data])
-                else:
-                    x, y = BOARD.user_input()
-                    message = pickle.dumps({'make_move': (x,y)})
-            elif m := data.get('make_move'):
-                print(f"incoming move: {m}")
-                if BOARD.receive_bomb(*m):
-                    message = pickle.dumps({'setup_left': LEFT[-1].getpeername()})
-                    send_message(RIGHT[-1], message)
-        
-                    message = pickle.dumps({'setup_right': RIGHT[-1].getpeername()})
-                    send_message(LEFT[-1], message)
-                else:
-                    message = pickle.dumps({'announce_turn': node_info})
-                    send_message(RIGHT[-1], message)
-            else:
-                print("Did not handle this yet")
-                    
-        else:
-            print("idk")
