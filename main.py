@@ -167,7 +167,7 @@ if __name__ == "__main__":
             message = pickle.dumps({'announce_turn': player1, 'share_player_list': PLAYERS})
             #send_message_pickle(RIGHT, 'announce_turn', player1)
             send_message(RIGHT, message)
-        LEFT.close()
+        #LEFT.close()
 
     def new_client(client_socket, address):
         global PLAYERS, LEFT, RIGHT
@@ -180,7 +180,7 @@ if __name__ == "__main__":
                     #print(f"Left is now {left}")
                     left = create_client(*left)
                     LEFT = left
-                    LEFT.close()
+                    #LEFT.close()
                     send_message_pickle(client_socket, 'setup_left_complete', 'setup left complete')
                     
     
