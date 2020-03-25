@@ -60,8 +60,10 @@ def create_client(destination: str, destination_port: int):
 
 def setup_client(direction: str):
     destination = input(
-            f"Choose the destination address. This person is on your {direction}: "
+            f"Choose the destination address. This person is on your {direction}. (Empty for localhost works too): "
     )
+    if destination == "":
+        destination = '127.0.0.1'
     destination_port = input("Port: ")
     destination_port = int(destination_port)
     return create_client(destination, destination_port)
@@ -220,11 +222,12 @@ if __name__ == "__main__":
 
             else:
                 # connection lost
+                #print("Connection lost")
 
                 if len(PLAYERS) < 2:
                     print("You win!")
-                    sys.exit()
-
+                
+                sys.exit()
                 # a node has lost of forfeited
 
 
