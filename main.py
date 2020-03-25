@@ -4,6 +4,7 @@ import random
 import socket
 import pickle
 import threading
+import sys
 
 HEADER_LENGTH = 10
 
@@ -102,7 +103,7 @@ def receive_message(client_socket):
 def send_message(socket, message: bytes, server=False):
     header = f"{len(message):<{HEADER_LENGTH}}".encode("utf-8")
     socket.send(header + message)
-    #print(f"sending to {socket.getpeername()} {pickle.loads(message)} from {socket.getsockname()}")
+    print(f"sending to {socket.getpeername()} {pickle.loads(message)} from {socket.getsockname()}")
 
 def rotate_list(l, pos: int):
     return l[pos:] + l[:pos]
@@ -118,12 +119,14 @@ def send_setup_left(client, node: Tuple[str, int]):
     if response := receive_message(client):
         data = pickle.loads(response['data'])
         print(f"Setup left complete: {data}")
+        return data
 
 def send_setup_right(client, node: Tuple[str, int]):
     send_message_pickle(client, 'setup_right', node)
     if response := receive_message(client):
         data = pickle.loads(response['data'])
-        #print(f"Setup right complete: {data}")
+        print(f"Setup right complete: {data}")
+        return data
 
 def send_message_pickle(client, key: str, val:any):
     message = pickle.dumps({key: val})
@@ -131,12 +134,12 @@ def send_message_pickle(client, key: str, val:any):
 
 if __name__ == "__main__":
 
-    LEFT = []
-    RIGHT = []
+    LEFT = None # clients
+    RIGHT = None
+    PLAYERS = {} # keeps track of who is attacking who
 
     BOARD = Board()
     print(f"your dot is {BOARD.dot}")
-    CURRENT_TURN = None
 
     print(
         "Welcome to BattleDot, an unpopular networked spinoff of the popular Battleship game."
@@ -149,24 +152,25 @@ if __name__ == "__main__":
     node_info = server.getsockname()
     #print(f"nodeinfo: {node_info}")
 
-    if first:
-        CURRENT_TURN = node_info
-
     if not first:
-        LEFT.append(setup_client("LEFT"))
-        RIGHT.append(setup_client("RIGHT"))
+        LEFT = setup_client("LEFT")
+        RIGHT = setup_client("RIGHT")
     
-        send_setup_left(RIGHT[-1], node_info)
-        send_setup_right(LEFT[-1], node_info)
-        
-        if LEFT[-1].getpeername() == RIGHT[-1].getpeername():
+        send_setup_left(RIGHT, node_info)
+        data = send_setup_right(LEFT, node_info)
+        PLAYERS = data.get('setup_right_complete')
+
+        if LEFT.getpeername() == RIGHT.getpeername():
             # 2nd player
             # start the game!
-            CURRENT_TURN = RIGHT[-1].getpeername()
-            send_message_pickle(RIGHT[-1], 'announce_turn', CURRENT_TURN)
+            player1 = RIGHT.getpeername()
+            message = pickle.dumps({'announce_turn': player1, 'share_player_list': PLAYERS})
+            #send_message_pickle(RIGHT, 'announce_turn', player1)
+            send_message(RIGHT, message)
+        LEFT.close()
 
     def new_client(client_socket, address):
-        global CURRENT_TURN
+        global PLAYERS, LEFT, RIGHT
         while True:
             if m := receive_message(client_socket):
                 data = pickle.loads(m['data'])
@@ -175,44 +179,54 @@ if __name__ == "__main__":
                 if left := data.get('setup_left'):
                     #print(f"Left is now {left}")
                     left = create_client(*left)
-                    LEFT.append(left)
-                    send_message_pickle(client_socket, 'info', 'setup left complete')
+                    LEFT = left
+                    LEFT.close()
+                    send_message_pickle(client_socket, 'setup_left_complete', 'setup left complete')
                     
     
                 elif right := data.get('setup_right'):
                     #print(f"Right is now {right}")
+                    #RIGHT.close()
                     right = create_client(*right)
-                    RIGHT.append(right)
+                    RIGHT = right
                     BOARD.reset_markers() # the person you're trying to kill has changed
-                    send_message_pickle(client_socket, 'info', 'setup right complete')
+                    PLAYERS[node_info] = RIGHT.getpeername()
+                    send_message_pickle(client_socket, 'setup_right_complete', PLAYERS)
+                    print(f"PLAYERS setup: {PLAYERS}")
     
                 elif  n := data.get('announce_turn'):
                     #print(f"turn announce: {n}")
                     if n != node_info:
-                        CURRENT_TURN = n
-                        send_message(RIGHT[-1], m['data'])
+                        print(f"PLAYERS announce: {PLAYERS}")
+                        message = pickle.dumps({'announce_turn': n, 'share_player_list': PLAYERS})
+                        send_message(RIGHT, message)
                     else:
                         x,y = BOARD.user_input()
-                        send_message_pickle(RIGHT[-1], 'make_move', (x, y))
+                        send_message_pickle(RIGHT, 'make_move', (x, y))
 
                 elif m := data.get('make_move'):
                     #print(f"incoming move: {m}")
                     if BOARD.receive_bomb(*m):
-                        message = pickle.dumps({'setup_left': LEFT[-1].getpeername()})
-                        send_message(RIGHT[-1], message)
-            
-                        message = pickle.dumps({'setup_right': RIGHT[-1].getpeername()})
-                        send_message(LEFT[-1], message)
+                        message = pickle.dumps({'setup_left': LEFT.getpeername()})
+                        send_message(RIGHT, message)
+
+                        message = pickle.dumps({'setup_right': RIGHT.getpeername()})
+                        send_message(RIGHT, message)
                     else:
                         message = pickle.dumps({'announce_turn': node_info})
-                        send_message(RIGHT[-1], message)
+                        send_message(RIGHT, message)
                 else:
                     print("Did not handle this yet")
-                        
+
             else:
                 # connection lost
-                RIGHT.pop()
-                print("idk")
+
+                if len(PLAYERS) < 2:
+                    print("You win!")
+                    sys.exit()
+
+                # a node has lost of forfeited
+
 
 
     threads = []
