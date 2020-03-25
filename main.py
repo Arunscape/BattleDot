@@ -166,6 +166,7 @@ if __name__ == "__main__":
         send_setup_left(RIGHT, node_info)
         data = send_setup_right(LEFT, node_info)
         PLAYERS = data.get('setup_right_complete')
+        PLAYERS[node_info] = RIGHT.getpeername()
 
         if LEFT.getpeername() == RIGHT.getpeername():
             # 2nd player
@@ -208,6 +209,7 @@ if __name__ == "__main__":
                         if send_message(RIGHT, message):
                             # node lost or forfeited. need to set up
                             right = PLAYERS[client_socket.getpeername()]
+                            del PLAYERS[client_socket.getpeername()]
                             RIGHT = create_client(*right)
                             send_setup_left(RIGHT, node_info)
                             send_message(RIGHT, message)
@@ -216,6 +218,7 @@ if __name__ == "__main__":
                         if send_message_pickle(RIGHT, 'make_move', (x,y)):
                             # node lost or forfeited. need to set up
                             right = PLAYERS[client_socket.getpeername()]
+                            del PLAYERS[client_socket.getpeername()]
                             RIGHT = create_client(*right)
                             send_setup_left(RIGHT, node_info)
                             send_message_pickle(RIGHT, 'make_move', (x,y))
@@ -230,9 +233,11 @@ if __name__ == "__main__":
                         if send_message(RIGHT, message):
                             # node lost or forfeited. need to set up
                             right = PLAYERS[client_socket.getpeername()]
+                            del PLAYERS[client_socket.getpeername()]
                             RIGHT = create_client(*right)
                             send_setup_left(RIGHT, node_info)
                             send_message(RIGHT, message)
+                        sys.exit()
 
                     else:
                         message = pickle.dumps({'announce_turn': node_info})
