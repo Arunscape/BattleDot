@@ -97,15 +97,20 @@ def receive_message(client_socket):
             return False
         message_length = int(message_header.decode("utf-8").strip())
         return {"header": message_header, "data": client_socket.recv(message_length)}
-    except Exception as e:
+    except Exception  as e:
         print(f"Uhh {e}")
         return False
 
 
 def send_message(socket, message: bytes, server=False):
-    header = f"{len(message):<{HEADER_LENGTH}}".encode("utf-8")
-    socket.send(header + message)
-    print(f"sending to {socket.getpeername()} {pickle.loads(message)} from {socket.getsockname()}")
+    try:
+        header = f"{len(message):<{HEADER_LENGTH}}".encode("utf-8")
+        socket.send(header + message)
+        print(f"sending to {socket.getpeername()} {pickle.loads(message)} from {socket.getsockname()}")
+        return False
+    except OSError:
+        # someone lost of forfeited
+        return True
 
 def rotate_list(l, pos: int):
     return l[pos:] + l[:pos]
@@ -132,7 +137,7 @@ def send_setup_right(client, node: Tuple[str, int]):
 
 def send_message_pickle(client, key: str, val:any):
     message = pickle.dumps({key: val})
-    send_message(client, message)
+    return send_message(client, message)
 
 if __name__ == "__main__":
 
@@ -188,7 +193,6 @@ if __name__ == "__main__":
     
                 elif right := data.get('setup_right'):
                     #print(f"Right is now {right}")
-                    #RIGHT.close()
                     right = create_client(*right)
                     RIGHT = right
                     BOARD.reset_markers() # the person you're trying to kill has changed
@@ -201,10 +205,20 @@ if __name__ == "__main__":
                     if n != node_info:
                         print(f"PLAYERS announce: {PLAYERS}")
                         message = pickle.dumps({'announce_turn': n, 'share_player_list': PLAYERS})
-                        send_message(RIGHT, message)
+                        if send_message(RIGHT, message):
+                            # node lost or forfeited. need to set up
+                            right = PLAYERS[client_socket.getpeername()]
+                            RIGHT = create_client(*right)
+                            send_setup_left(RIGHT, node_info)
+                            send_message(RIGHT, message)
                     else:
                         x,y = BOARD.user_input()
-                        send_message_pickle(RIGHT, 'make_move', (x, y))
+                        if send_message_pickle(RIGHT, 'make_move', (x,y)):
+                            # node lost or forfeited. need to set up
+                            right = PLAYERS[client_socket.getpeername()]
+                            RIGHT = create_client(*right)
+                            send_setup_left(RIGHT, node_info)
+                            send_message_pickle(RIGHT, 'make_move', (x,y))
 
                 elif m := data.get('make_move'):
                     #print(f"incoming move: {m}")
@@ -213,7 +227,13 @@ if __name__ == "__main__":
                         send_message(RIGHT, message)
 
                         message = pickle.dumps({'setup_right': RIGHT.getpeername()})
-                        send_message(RIGHT, message)
+                        if send_message(RIGHT, message):
+                            # node lost or forfeited. need to set up
+                            right = PLAYERS[client_socket.getpeername()]
+                            RIGHT = create_client(*right)
+                            send_setup_left(RIGHT, node_info)
+                            send_message(RIGHT, message)
+
                     else:
                         message = pickle.dumps({'announce_turn': node_info})
                         send_message(RIGHT, message)
